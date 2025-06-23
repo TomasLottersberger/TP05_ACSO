@@ -15,6 +15,9 @@
 #include <thread>      // for thread
 #include <vector>      // for vector
 #include "Semaphore.h" // for Semaphore
+#include <queue>       // for queue
+#include <mutex>       // for mutex
+#include <atomic>      // for atomic
 
 using namespace std;
 
@@ -31,9 +34,9 @@ using namespace std;
 typedef struct worker {
     thread ts;
     function<void(void)> thunk;
-    /**
-     * Complete the definition of the worker_t struct here...
-     **/
+    Semaphore sem;
+    bool available; // true if worker is inactive
+    worker(): sem(0), available(true) {}
 } worker_t;
 
 class ThreadPool {
@@ -73,19 +76,15 @@ class ThreadPool {
     thread dt;                              // dispatcher thread handle
     vector<worker_t> wts;                   // worker thread handles. you may want to change/remove this
     bool done;                              // flag to indicate the pool is being destroyed
-    mutex queueLock;                        // mutex to protect the queue of tasks
 
-    /* It is incomplete, there should be more private variables to manage the structures... 
-    * *
-    */
-  
-    /* ThreadPools are the type of thing that shouldn't be cloneable, since it's
-    * not clear what it means to clone a ThreadPool (should copies of all outstanding
-    * functions to be executed be copied?).
-    *
-    * In order to prevent cloning, we remove the copy constructor and the
-    * assignment operator.  By doing so, the compiler will ensure we never clone
-    * a ThreadPool. */
+    queue<function<void(void)>> taskQueue; // FIFO queue
+    mutex queueLock;                        // mutex to protect the queue of tasks
+    Semaphore taskCount; // count of queued tasks
+
+    mutex waitLock; // protects busy count
+    condition_variable waitCv; // for wait()
+    atomic<int> busyCount; // number of tasks in flight
+    
     ThreadPool(const ThreadPool& original) = delete;
     ThreadPool& operator=(const ThreadPool& rhs) = delete;
 };
